@@ -8,8 +8,6 @@ import { UserPoint } from "src/point/point.model";
 @Injectable()
 export class UserPointTable {
     private readonly table: Map<number, UserPoint> = new Map()
-    readonly MAX_BALANCE    = 1000000000; // 최대 잔고: 10억 포인트
-    readonly MIN_USE_AMOUNT = 500;        // 최소 사용 금액:  500 포인트
 
     selectById(id: number): Promise<UserPoint> {
         this.isValidId(id)
