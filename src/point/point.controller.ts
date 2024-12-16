@@ -2,14 +2,10 @@ import { Body, Controller, Get, Param, Patch, ValidationPipe } from '@nestjs/com
 import { PointService } from './point.service';
 import { UserPoint, PointHistory } from './point.model';
 import { PointBody as PointDto } from './point.dto';
-import { UserPointTable } from 'src/database/userpoint.table';
-import { PointHistoryTable } from 'src/database/pointhistory.table';
 
 @Controller('/point')
 export class PointController {
     constructor(
-        // private readonly userDb: UserPointTable,
-        // private readonly historyDb: PointHistoryTable,
         private readonly pointService: PointService
     ) {}
 
@@ -34,7 +30,8 @@ export class PointController {
         @Body(ValidationPipe) pointDto: PointDto,
     ): Promise<UserPoint> {
         const userId = Number.parseInt(id);
-        return this.pointService.chargePoint(userId, pointDto.amount);
+        const {amount} = pointDto;
+        return this.pointService.chargePoint(userId, amount);
     }
 
     // 특정 유저의 포인트 사용
@@ -44,6 +41,7 @@ export class PointController {
         @Body(ValidationPipe) pointDto: PointDto,
     ): Promise<UserPoint> {
         const userId = Number.parseInt(id);
-        return this.pointService.usePoint(userId, pointDto.amount);
+        const {amount} = pointDto;
+        return this.pointService.usePoint(userId, amount);
     }
 }
