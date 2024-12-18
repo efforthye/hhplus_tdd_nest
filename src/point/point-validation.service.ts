@@ -23,9 +23,10 @@ export class PointValidationService {
      * @throws BadRequestException - 잔고 초과 시
      */
     validateMaxBalance(currentPoint: number, addAmount: number): void {
+        const maxBalance = this.MAX_BALANCE;
         const newBalance = currentPoint+addAmount;
-        if (newBalance > this.MAX_BALANCE) {
-            throw new BadRequestException(`최대 잔고 ${this.MAX_BALANCE} 포인트를 초과할 수 없습니다.`);
+        if (newBalance > maxBalance) {
+            throw new BadRequestException(`최대 잔고 ${maxBalance} 포인트를 초과할 수 없습니다.`);
         }
     }
 
@@ -35,8 +36,9 @@ export class PointValidationService {
      * @throws BadRequestException - 최소 금액 미만인 경우
      */
     validateMinUseAmount(amount: number): void {
-        if (amount < this.MIN_USE_AMOUNT) {
-            throw new BadRequestException(`최소 사용 금액은 ${this.MIN_USE_AMOUNT} 포인트 이상이어야 합니다.`);
+        const minUseAmount = this.MIN_USE_AMOUNT;
+        if (amount < minUseAmount) {
+            throw new BadRequestException(`최소 사용 금액은 ${minUseAmount} 포인트 이상이어야 합니다.`);
         }
     }
 
@@ -46,9 +48,10 @@ export class PointValidationService {
      * @throws BadRequestException - 금액이 최소 충전 금액 미만인 경우
      */
     validateMinChargeAmount(amount: number): void {
-        if (amount < this.MIN_CHARGE_AMOUNT) {
+        const minChargeAmount = this.MIN_CHARGE_AMOUNT;
+        if (amount < minChargeAmount) {
             throw new BadRequestException(
-                `충전 금액은 최소 ${this.MIN_CHARGE_AMOUNT} 포인트 이상이어야 합니다.`,
+                `충전 금액은 최소 ${minChargeAmount} 포인트 이상이어야 합니다.`,
             );
         }
     }

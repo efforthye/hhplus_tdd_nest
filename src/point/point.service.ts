@@ -1,11 +1,14 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { UserPointTable } from 'src/database/userpoint.table';
 import { PointHistoryTable } from 'src/database/pointhistory.table';
 import { PointValidationService } from './point-validation.service';
 import { PointHistory, TransactionType, UserPoint } from './point.model';
+import { Mutex } from 'async-mutex';
 
 @Injectable()
 export class PointService {
+    private readonly userMutex: Map<number, Mutex> = new Map(); // 각 userId별 Mutex 저장
+
     constructor(
         private readonly userDb: UserPointTable,
         private readonly historyDb: PointHistoryTable,
@@ -39,15 +42,21 @@ export class PointService {
      * @throws BadRequestException - 금액이 유효하지 않거나 최소 충전 금액 미만인 경우
      */
     async chargePoint(userId: number, amount: number): Promise<UserPoint> {
-        this.validationService.validateAmount(amount); // 금액 기본 검증
-        this.validationService.validateMinChargeAmount(amount); // 최소 충전 금액 검증
+        return await this.runWithLock(userId, async () => {
+            this.validationService.validateAmount(amount);
+            this.validationService.validateMinChargeAmount(amount);
 
-        const transactionType: TransactionType = TransactionType.CHARGE;
-        const {point: prevAmount} = await this.userDb.selectById(userId);
-        this.validationService.validateMaxBalance(prevAmount, amount); // 최대 잔고 초과 검증
+            const transactionType: TransactionType = TransactionType.CHARGE;
+            const { point: prevAmount } = await this.userDb.selectById(userId);
+            console.log(`[ChargePoint] Previous Point: ${prevAmount}`);
+            this.validationService.validateMaxBalance(prevAmount, amount);
 
-        const newAmount = prevAmount+amount;
-        return this.updateUserPointAndHistory(userId, newAmount, transactionType);
+            const newAmount = prevAmount + amount;
+            console.log(`[ChargePoint] New Point (After Charge): ${newAmount}`);
+            const updatedUserPoint = this.updateUserPointAndHistory(userId, newAmount, transactionType);
+            console.log(`[ChargePoint] Final User Point: ${JSON.stringify(updatedUserPoint)}`);
+            return updatedUserPoint;
+        });
     }
 
     /**
@@ -58,15 +67,17 @@ export class PointService {
      * @throws BadRequestException - 잔고 부족, 최소 금액 미만, 금액 유효하지 않은 경우
      */
     async usePoint(userId: number, amount: number): Promise<UserPoint> {
-        this.validationService.validateAmount(amount);
-        this.validationService.validateMinUseAmount(amount);
+        return await this.runWithLock(userId, async () => {
+            this.validationService.validateAmount(amount);
+            this.validationService.validateMinUseAmount(amount);
 
-        const transactionType: TransactionType = TransactionType.USE;
-        const {point: prevAmount} = await this.userDb.selectById(userId);
-        this.validationService.validateSufficientBalance(prevAmount, amount);
+            const transactionType: TransactionType = TransactionType.USE;
+            const { point: prevAmount } = await this.userDb.selectById(userId);
+            this.validationService.validateSufficientBalance(prevAmount, amount);
 
-        const newAmount = prevAmount-amount;
-        return this.updateUserPointAndHistory(userId, newAmount, transactionType);
+            const newAmount = prevAmount - amount;
+            return this.updateUserPointAndHistory(userId, newAmount, transactionType);
+        });
     }
 
     /**
@@ -82,20 +93,43 @@ export class PointService {
         newAmount: number,
         transactionType: TransactionType,
     ): Promise<UserPoint> {
+        console.log(`[updateUserPointAndHistory] Start - User: ${userId}, New Amount: ${newAmount}`);
         const currentUser = await this.userDb.selectById(userId);
+        console.log(`[updateUserPointAndHistory] Current User: ${JSON.stringify(currentUser)}`);
         let historyId: PointHistory = null;
-
+    
         try {
             const updatedPointInfo = await this.userDb.insertOrUpdate(userId, newAmount);
-            const {updateMillis} = updatedPointInfo;
-
+            console.log(`[updateUserPointAndHistory] Updated Point Info: ${JSON.stringify(updatedPointInfo)}`);
+            const { updateMillis } = updatedPointInfo;
+    
             historyId = await this.historyDb.insert(userId, newAmount, transactionType, updateMillis);
-
+            console.log(`[updateUserPointAndHistory] History ID: ${JSON.stringify(historyId)}`);
+    
             return updatedPointInfo;
         } catch (error) {
-            if (currentUser) await this.userDb.insertOrUpdate(userId, currentUser.point); // 포인트 롤백
-            // if (historyId !== null) await this.historyDb.delete(historyId); // 히스토리 롤백
+            if (currentUser) {
+                console.log(`[updateUserPointAndHistory] Rolling back to: ${currentUser.point}`);
+                await this.userDb.insertOrUpdate(userId, currentUser.point); // 포인트 롤백
+            }
             throw new Error('포인트 업데이트 또는 기록 저장 실패');
         }
     }
+    
+
+    /**
+     * 특정 유저에 대한 동시성 제어를 위한 Mutex 실행 래퍼
+     * @param userId - 잠금을 적용할 유저의 ID
+     * @param callback - 잠금 내에서 실행할 함수
+     * @returns callback의 실행 결과
+     */
+    private async runWithLock<T>(userId: number, callback: () => Promise<T>): Promise<T> {
+        let mutex = this.userMutex.get(userId);
+        if (!mutex) {
+            mutex = new Mutex();
+            this.userMutex.set(userId, mutex);
+        }
+        return await mutex.runExclusive(callback);
+    }
+    
 }
