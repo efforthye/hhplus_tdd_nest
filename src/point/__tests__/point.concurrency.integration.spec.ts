@@ -13,6 +13,7 @@ describe('PointService - Advanced Integration Tests', () => {
     let points: Map<number, number>;
 
     beforeEach(() => {
+        // 제스트 타임아웃 시간 증가 (기본 5초 -> 10초)
         jest.setTimeout(10000);
         
         validationService = new PointValidationService();
@@ -197,6 +198,7 @@ describe('PointService - Advanced Integration Tests', () => {
     });
 
     // 연속 사용 요청 시 일부 성공 일부 실패 테스트
+    // -> 초기 포인트 10000인 상태에서 3000원을 5번 사용할 시 3번 성공/2번 실패
     it('연속 사용 요청 시 일부 성공 일부 실패', async () => {
         const useRequests = Array(5).fill(null).map(() => 
             pointService.usePoint(1, 3000)
